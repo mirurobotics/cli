@@ -9,7 +9,6 @@ BINARY_NAME="miru"
 GITHUB_REPO="mirurobotics/cli"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 SUDO="${SUDO:-}"
-API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 MAX_RETRIES="${MAX_RETRIES:-3}"
 RETRY_DELAY="${RETRY_DELAY:-2}"
 
@@ -84,8 +83,7 @@ detect_platform() {
     case "$ARCH" in
         x86_64|amd64)   ARCH="x86_64" ;;
         aarch64|arm64)  ARCH="arm64" ;;
-        armv7l)         ARCH="armv7" ;;
-        *)              error "Unsupported architecture: $ARCH (supported: x86_64, arm64, armv7)" ;;
+        *)              error "Unsupported architecture: $ARCH (supported: x86_64, arm64)" ;;
     esac
 
     # Apple Silicon uses /opt/homebrew/bin by default
@@ -95,20 +93,26 @@ detect_platform() {
 }
 
 resolve_version() {
-    if [ -n "$VERSION" ]; then
-        # Ensure version has v prefix
-        case "$VERSION" in
-            v*) ;;
-            *)  VERSION="v$VERSION" ;;
-        esac
-        log "Using version: $VERSION"
-    else
-        log "Fetching latest version..."
-        API_RESPONSE=$(retry curl -sL "$API_URL") || error "Failed to reach GitHub API: $API_URL"
-        VERSION=$(echo "$API_RESPONSE" | grep "tag_name" | cut -d '"' -f 4)
-        [ -z "$VERSION" ] && error "Could not parse version from GitHub API response"
-        log "Latest version: $VERSION"
+    # Handle 'latest' or empty version -> v0.8.0
+    if [ -z "$VERSION" ] || [ "$VERSION" = "latest" ] || [ "$VERSION" = "Latest" ] || [ "$VERSION" = "LATEST" ]; then
+        VERSION="v0.8.0"
+        log "Installing version: $VERSION"
+        return
     fi
+    
+    # Ensure version has v prefix
+    case "$VERSION" in
+        v*) ;;
+        *)  VERSION="v$VERSION" ;;
+    esac
+    
+    # Map version aliases to v0.8.0
+    case "$VERSION" in
+        v0) VERSION="v0.8.0" ;;
+        v0.8) VERSION="v0.8.0" ;;
+    esac
+    
+    log "Installing version: $VERSION"
 }
 
 check_existing_install() {
@@ -117,6 +121,7 @@ check_existing_install() {
         installed_version=$("$binary_path" --version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1) || true
         if [ "$installed_version" = "$VERSION" ]; then
             log "$BINARY_NAME $VERSION is already installed"
+            set_github_actions_version_output
             exit 0
         elif [ -n "$installed_version" ]; then
             log "Upgrading $BINARY_NAME from $installed_version to $VERSION"
@@ -144,13 +149,25 @@ verify_checksum() {
     fi
 }
 
+set_github_actions_version_output() {
+    # Output version for GitHub Actions
+    # Only output if we're in GitHub Actions environment
+    if [ -n "$GITHUB_OUTPUT" ]; then
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+    elif [ -n "$GITHUB_ACTIONS" ]; then
+        # In GitHub Actions but using legacy set-output format
+        echo "::set-output name=version::$VERSION"
+    fi
+    # If not in GitHub Actions, don't output anything (especially in quiet mode)
+}
+
 # =============================================================================
 # Main
 # =============================================================================
 
 main() {
     # Parse arguments
-    VERSION=""
+    VERSION="${INPUT_VERSION:-}"
     for arg in "$@"; do
         case "$arg" in
             --version=*) VERSION="${arg#*=}" ;;
@@ -202,6 +219,7 @@ main() {
     # Done
     log "$BINARY_NAME $VERSION successfully installed to $INSTALL_DIR/$BINARY_NAME"
     [ "$QUIET" = true ] || echo "$PATH" | grep -q "$INSTALL_DIR" || warn "$INSTALL_DIR is not in your PATH"
+    set_github_actions_version_output
 }
 
 main "$@"
