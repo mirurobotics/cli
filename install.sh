@@ -93,9 +93,9 @@ detect_platform() {
 }
 
 resolve_version() {
-    # Handle 'latest' or empty version -> v0.9.2
+    # Handle 'latest' or empty version
     if [ -z "$VERSION" ] || [ "$VERSION" = "latest" ] || [ "$VERSION" = "Latest" ] || [ "$VERSION" = "LATEST" ]; then
-        VERSION="v0.9.2"
+        VERSION="v0.10.0"
         log "Installing version: $VERSION"
         return
     fi
@@ -106,10 +106,11 @@ resolve_version() {
         *)  VERSION="v$VERSION" ;;
     esac
     
-    # Map version aliases to v0.9.2
+    # Map version aliases
     case "$VERSION" in
-        v0) VERSION="v0.9.2" ;;
+        v0) VERSION="v0.10.0" ;;
         v0.9) VERSION="v0.9.2" ;;
+        v0.10) VERSION="v0.10.0" ;;
     esac
     
     log "Installing version: $VERSION"
