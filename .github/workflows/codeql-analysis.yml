@@ -1,0 +1,52 @@
+name: CodeQL
+
+on:
+  schedule:
+    - cron: '31 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  checks: write
+  contents: read
+  security-events: write
+
+jobs:
+  changes:
+    name: Check for new commits
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      scan: ${{ steps.check.outputs.scan }}
+    steps:
+      # The nightly run skips the scan when main hasn't moved since the last
+      # successful run, so quiet repos don't rescan the same commit.
+      - name: Check for commits since the last scan
+        id: check
+        uses: mirurobotics/.github/actions/codeql-gate@d2aec010e6ce5c9dd65fb16e6d06a0f61e437734 # main
+
+  codeql:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scan != 'false' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Initialize CodeQL
+        id: initialize
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        with:
+          languages: actions
+
+      - name: Autobuild
+        id: autobuild
+        uses: github/codeql-action/autobuild@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+
+      - name: Perform CodeQL Analysis
+        id: analyze
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
